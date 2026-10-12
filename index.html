@@ -1,0 +1,1343 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UNO 卡牌遊戲</title>
+<style>
+/* ===== 重置與基礎 ===== */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --red: #d32f2f;
+  --yellow: #f9a825;
+  --green: #2e7d32;
+  --blue: #1565c0;
+  --dark: #1a1a2e;
+  --gold: #ffd700;
+}
+
+body {
+  font-family: 'Segoe UI', Tahoma, sans-serif;
+  background: radial-gradient(ellipse at center, #1e6b3a 0%, #0d3b1e 70%, #061a0d 100%);
+  min-height: 100vh;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ===== 遊戲桌面 ===== */
+#game-table {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* ===== AI 玩家區域 ===== */
+.ai-player {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  position: absolute;
+  z-index: 5;
+}
+
+.ai-player.top { top: 10px; left: 50%; transform: translateX(-50%); }
+.ai-player.left { left: 10px; top: 50%; transform: translateY(-50%); }
+.ai-player.right { right: 10px; top: 50%; transform: translateY(-50%); }
+
+.player-name {
+  background: rgba(0,0,0,0.6);
+  color: #fff;
+  padding: 4px 14px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: bold;
+  white-space: nowrap;
+  border: 2px solid transparent;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+.player-name.active {
+  border-color: var(--gold);
+  box-shadow: 0 0 15px rgba(255,215,0,0.6);
+}
+
+.ai-hand {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+
+.ai-hand.left, .ai-hand.right {
+  flex-direction: column;
+}
+
+/* ===== 卡牌背面 (AI 手牌) ===== */
+.card-back {
+  width: 40px;
+  height: 60px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  border: 2px solid #e94560;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: bold;
+  color: #e94560;
+  position: relative;
+  flex-shrink: 0;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+}
+
+.card-back::before {
+  content: "UNO";
+  transform: rotate(-25deg);
+  font-size: 9px;
+  letter-spacing: 1px;
+  text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+}
+
+.ai-hand.left .card-back, .ai-hand.right .card-back {
+  width: 60px;
+  height: 40px;
+}
+
+/* ===== 中央區域 ===== */
+.center-area {
+  display: flex;
+  align-items: center;
+  gap: 30px;
+  margin: auto;
+  position: relative;
+  z-index: 1;
+}
+
+.pile-label {
+  text-align: center;
+  color: rgba(255,255,255,0.5);
+  font-size: 12px;
+  margin-top: 6px;
+}
+
+.draw-pile, .discard-pile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* ===== 卡牌通用樣式 ===== */
+.card {
+  width: 80px;
+  height: 120px;
+  border-radius: 10px;
+  position: relative;
+  cursor: pointer;
+  flex-shrink: 0;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.5);
+  transition: transform 0.2s, margin 0.2s;
+  overflow: hidden;
+}
+
+.card-inner {
+  width: 100%;
+  height: 100%;
+  border-radius: 10px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.card-oval {
+  position: absolute;
+  width: 70%;
+  height: 90%;
+  border-radius: 50%;
+  background: #fff;
+  transform: rotate(-20deg);
+  top: 5%;
+  left: 15%;
+}
+
+.card-center-value {
+  position: relative;
+  z-index: 2;
+  font-size: 38px;
+  font-weight: 900;
+  font-family: 'Arial Black', sans-serif;
+  text-shadow: 2px 2px 0 rgba(0,0,0,0.2);
+}
+
+.card-corner {
+  position: absolute;
+  font-size: 16px;
+  font-weight: 900;
+  font-family: 'Arial Black', sans-serif;
+  z-index: 2;
+  line-height: 1;
+}
+
+.card-corner.tl { top: 6px; left: 8px; }
+.card-corner.br { bottom: 6px; right: 8px; transform: rotate(180deg); }
+
+/* 卡牌顏色 */
+.card[data-color="red"] .card-inner { background: var(--red); }
+.card[data-color="yellow"] .card-inner { background: var(--yellow); }
+.card[data-color="green"] .card-inner { background: var(--green); }
+.card[data-color="blue"] .card-inner { background: var(--blue); }
+.card[data-color="wild"] .card-inner { background: #1a1a2e; }
+
+.card[data-color="red"] .card-center-value,
+.card[data-color="red"] .card-corner { color: var(--red); }
+.card[data-color="yellow"] .card-center-value,
+.card[data-color="yellow"] .card-corner { color: var(--yellow); }
+.card[data-color="green"] .card-center-value,
+.card[data-color="green"] .card-corner { color: var(--green); }
+.card[data-color="blue"] .card-center-value,
+.card[data-color="blue"] .card-corner { color: var(--blue); }
+.card[data-color="wild"] .card-center-value,
+.card[data-color="wild"] .card-corner { color: #fff; }
+
+/* Wild 卡的四色圓 */
+.wild-quadrants {
+  position: absolute;
+  width: 70%;
+  height: 90%;
+  border-radius: 50%;
+  transform: rotate(-20deg);
+  top: 5%;
+  left: 15%;
+  overflow: hidden;
+  z-index: 1;
+}
+.wild-quadrants::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, var(--red) 50%, var(--blue) 50%),
+    linear-gradient(90deg, var(--yellow) 50%, var(--green) 50%);
+  background-size: 100% 50%, 100% 50%;
+  background-position: 0 0, 0 100%;
+  background-repeat: no-repeat;
+}
+
+/* Draw Pile 卡背 */
+.draw-pile .card {
+  cursor: pointer;
+}
+
+.draw-pile .card .card-inner {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  border: 3px solid #e94560;
+  justify-content: center;
+}
+
+.draw-pile .card .card-inner::after {
+  content: "UNO";
+  color: #e94560;
+  font-size: 22px;
+  font-weight: bold;
+  transform: rotate(-25deg);
+  text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+}
+
+/* ===== 玩家手牌區 ===== */
+.player-hand-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-bottom: 10px;
+  width: 100%;
+  overflow: visible;
+  z-index: 10;
+}
+
+.player-hand {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  min-height: 140px;
+  padding: 0 20px;
+  flex-wrap: nowrap;
+}
+
+.player-hand .card {
+  margin-left: -30px;
+  transition: transform 0.2s, margin 0.2s;
+}
+
+.player-hand .card:first-child {
+  margin-left: 0;
+}
+
+.player-hand .card:hover.playable {
+  transform: translateY(-20px);
+  z-index: 100;
+}
+
+.player-hand .card.playable {
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(255,215,0,0.5);
+}
+
+.player-hand .card:not(.playable) {
+  opacity: 0.6;
+  cursor: default;
+  filter: grayscale(30%);
+}
+
+.player-hand .card.played-anim {
+  animation: cardPlay 0.4s ease-out forwards;
+}
+
+@keyframes cardPlay {
+  0% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-60px) scale(1.1); }
+  100% { transform: translateY(-200px) scale(0.5); opacity: 0; }
+}
+
+@keyframes cardDraw {
+  from { transform: translateY(-100px) scale(0.5); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+.card-draw-anim {
+  animation: cardDraw 0.3s ease-out;
+}
+
+/* ===== 方向指示器 ===== */
+.direction-indicator {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 200px;
+  height: 200px;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.15;
+}
+
+.direction-indicator svg {
+  width: 100%;
+  height: 100%;
+  transition: transform 0.5s;
+}
+
+/* ===== 顏色選擇器 ===== */
+.color-picker-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.color-picker-overlay.show {
+  display: flex;
+}
+
+.color-picker {
+  background: rgba(20,20,40,0.95);
+  padding: 30px 40px;
+  border-radius: 20px;
+  text-align: center;
+  border: 2px solid rgba(255,255,255,0.1);
+}
+
+.color-picker h3 {
+  color: #fff;
+  margin-bottom: 20px;
+  font-size: 20px;
+}
+
+.color-options {
+  display: flex;
+  gap: 15px;
+}
+
+.color-option {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 3px solid transparent;
+  transition: transform 0.2s, border-color 0.2s;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.4);
+}
+
+.color-option:hover {
+  transform: scale(1.15);
+  border-color: var(--gold);
+}
+
+.color-option[data-color="red"] { background: var(--red); }
+.color-option[data-color="yellow"] { background: var(--yellow); }
+.color-option[data-color="green"] { background: var(--green); }
+.color-option[data-color="blue"] { background: var(--blue); }
+
+/* ===== 訊息區 ===== */
+#message-bar {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,0.8);
+  color: #fff;
+  padding: 10px 30px;
+  border-radius: 25px;
+  font-size: 16px;
+  font-weight: bold;
+  z-index: 500;
+  border: 1px solid rgba(255,255,255,0.2);
+  min-width: 200px;
+  text-align: center;
+  transition: opacity 0.3s;
+}
+
+/* ===== UNO 按鈕 ===== */
+#uno-btn {
+  position: fixed;
+  bottom: 160px;
+  right: 30px;
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #e94560 0%, #c62828 100%);
+  color: #fff;
+  border: 3px solid #ffd700;
+  font-size: 22px;
+  font-weight: 900;
+  cursor: pointer;
+  z-index: 100;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Arial Black', sans-serif;
+  transition: transform 0.2s, box-shadow 0.2s;
+  animation: unoPulse 1s infinite;
+}
+
+#uno-btn.show {
+  display: flex;
+}
+
+#uno-btn:hover {
+  transform: scale(1.1);
+  box-shadow: 0 6px 20px rgba(255,215,0,0.5);
+}
+
+@keyframes unoPulse {
+  0%, 100% { box-shadow: 0 4px 15px rgba(0,0,0,0.5), 0 0 0 0 rgba(255,215,0,0.4); }
+  50% { box-shadow: 0 4px 15px rgba(0,0,0,0.5), 0 0 0 12px rgba(255,215,0,0); }
+}
+
+/* ===== 新遊戲按鈕 ===== */
+#new-game-btn {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: rgba(0,0,0,0.7);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.2);
+  padding: 8px 16px;
+  border-radius: 15px;
+  font-size: 13px;
+  cursor: pointer;
+  z-index: 500;
+  font-weight: bold;
+  transition: background 0.2s;
+}
+
+#new-game-btn:hover {
+  background: rgba(0,0,0,0.9);
+}
+
+/* ===== 勝利畫面 ===== */
+.win-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.85);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.win-overlay.show {
+  display: flex;
+}
+
+.win-box {
+  text-align: center;
+  padding: 50px 80px;
+  border-radius: 30px;
+  background: linear-gradient(135deg, rgba(30,107,58,0.95), rgba(13,59,30,0.95));
+  border: 2px solid var(--gold);
+  box-shadow: 0 0 50px rgba(255,215,0,0.3);
+}
+
+.win-box h1 {
+  color: var(--gold);
+  font-size: 48px;
+  margin-bottom: 15px;
+  font-family: 'Arial Black', sans-serif;
+  text-shadow: 3px 3px 0 rgba(0,0,0,0.3);
+}
+
+.win-box p {
+  color: #fff;
+  font-size: 20px;
+  margin-bottom: 30px;
+}
+
+.win-box button {
+  background: var(--gold);
+  color: #1a1a2e;
+  border: none;
+  padding: 12px 40px;
+  border-radius: 25px;
+  font-size: 18px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.win-box button:hover {
+  transform: scale(1.05);
+}
+
+/* ===== 卡牌彈出動畫 (打出去) ===== */
+@keyframes flyToCenter {
+  0% { transform: scale(1) translate(0,0); opacity: 1; }
+  100% { transform: scale(0.8) translate(var(--fly-x), var(--fly-y)); opacity: 0.8; }
+}
+
+/* 響應式 */
+@media (max-width: 768px) {
+  .card { width: 55px; height: 82px; }
+  .card-center-value { font-size: 26px; }
+  .card-corner { font-size: 11px; }
+  .player-hand .card { margin-left: -20px; }
+  .card-back { width: 28px; height: 42px; }
+  .ai-hand.left .card-back, .ai-hand.right .card-back { width: 42px; height: 28px; }
+  #uno-btn { width: 55px; height: 55px; font-size: 18px; bottom: 110px; right: 15px; }
+}
+
+@media (max-width:600px) and (orientation:portrait){
+  html,body{width:100%;height:100%;height:100dvh;overflow:hidden}
+  #game-table{height:100dvh;min-height:0;overflow:hidden}
+  .topbar-brand{top:7px;left:8px;font-size:11px;gap:5px}
+  .topbar-brand img{width:25px;height:21px}
+  #message-bar{top:8px;max-width:49vw;padding:5px 9px;font-size:10px}
+  #new-game-btn{top:7px;right:7px;padding:5px 8px;font-size:10px}
+  .ai-player.top{top:7%}
+  .ai-player.top .player-name{font-size:11px;padding:3px 9px;min-width:100px}
+  .ai-player.top .player-name::before{width:29px;height:29px;left:-33px;font-size:17px;border-radius:8px}
+  .ai-player.top .card-back{width:25px;height:37px;border-radius:5px;font-size:7px}
+  .ai-player.left{left:1%;top:27%;align-items:flex-start}
+  .ai-player.right{right:1%;top:27%;align-items:flex-end}
+  .ai-player.left .player-name,.ai-player.right .player-name{font-size:9px;padding:3px 6px;gap:4px}
+  .ai-player.left .player-name::before,.ai-player.right .player-name::before{width:26px;height:26px;font-size:15px;border-radius:8px}
+  .ai-player.left .card-back,.ai-player.right .card-back{width:19px;height:29px;margin-left:-10px;border-radius:4px;font-size:6px}
+  .center-area{top:49%;gap:18px}
+  .draw-pile .card,#discard-card-container .card{width:54px;height:81px;border-radius:8px;border-width:3px}
+  .draw-pile .card .card-inner::after{font-size:17px}
+  .center-area .card-center-value{font-size:27px}
+  .center-area .card-corner{font-size:10px}
+  .pile-label{font-size:8px;margin-top:4px}
+  #direction-indicator{width:min(55vw,36vh);height:min(55vw,36vh)}
+  .player-hand-area{left:0;right:0;bottom:0;padding:0 3px 7px}
+  .player-hand{width:100%;height:118px;min-height:0;padding:0 3px;justify-content:center;align-items:flex-end;overflow:visible}
+  .player-hand .card{width:clamp(43px,12vw,55px);height:auto;aspect-ratio:2/3;margin-left:clamp(-25px,-5.5vw,-15px);border-width:2px;border-radius:7px}
+  .player-hand .card:first-child{margin-left:0}
+  .player-hand .card:nth-child(1){transform:rotate(-9deg) translateY(4px)}
+  .player-hand .card:nth-child(2){transform:rotate(-5deg) translateY(1px)}
+  .player-hand .card:nth-child(3){transform:rotate(-2deg)}
+  .player-hand .card:nth-child(4){transform:rotate(2deg)}
+  .player-hand .card:nth-child(5){transform:rotate(5deg) translateY(1px)}
+  .player-hand .card:nth-child(n+6){transform:rotate(9deg) translateY(4px)}
+  .card-center-value{font-size:clamp(22px,6vw,29px)}
+  .card-corner{font-size:9px}
+  #name-0{position:fixed;left:8px;bottom:122px;min-width:0;padding:4px 9px 4px 5px;font-size:12px;gap:5px}
+  #name-0::before{width:38px;height:38px;font-size:23px;border-radius:12px}
+  #draw-action-btn{right:8px;bottom:121px;min-width:82px;min-height:36px;padding:5px 9px;font-size:11px}
+  #uno-btn{right:8px;bottom:163px;min-width:82px;min-height:36px;padding:5px 9px;font-size:13px}
+}
+
+</style>
+
+<style id="uno-premium-redesign">
+:root{--blue:#087ff5;--blue-deep:#062a86;--ice:#8deaff;--ui:#071b4c;--gold:#ffe563;--red:#ed2336;--yellow:#f8cf18;--green:#13a56b;--blue-card:#1284ef}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;margin:0;overflow:hidden}
+body{font-family:system-ui,-apple-system,"Segoe UI","Noto Sans TC",sans-serif;color:#fff;background:#061d68;user-select:none;-webkit-user-select:none;overscroll-behavior:none}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at 50% 57%,#23bfff 0%,#087de8 27%,#0756ce 57%,#062773 100%);z-index:-2}
+body::after{content:"";position:fixed;inset:-40%;pointer-events:none;z-index:-1;background:repeating-conic-gradient(from 1deg at 50% 50%,rgba(119,203,255,.08) 0deg 9deg,transparent 9deg 22deg);mask-image:radial-gradient(ellipse at center,#000 5%,transparent 73%);animation:rayDrift 32s linear infinite}
+@keyframes rayDrift{to{transform:rotate(360deg)}}
+.topbar-brand{position:fixed;z-index:30;top:10px;left:16px;display:flex;align-items:center;gap:9px;font-size:16px;font-weight:800;letter-spacing:.04em;text-shadow:0 2px 8px #061c59}
+.topbar-brand img{width:34px;height:28px;object-fit:contain;filter:drop-shadow(0 2px 4px #05184a)}
+#game-table{position:relative;width:100vw;height:100dvh;min-height:280px;display:block;overflow:hidden;isolation:isolate}
+#game-table::before{content:"";position:absolute;z-index:-1;left:50%;top:51%;width:min(86vw,1250px);height:min(67vh,730px);transform:translate(-50%,-50%);border:3px solid rgba(135,226,255,.35);border-radius:50%;box-shadow:0 0 0 20px rgba(70,184,255,.045),0 0 90px rgba(42,195,255,.2),inset 0 0 60px rgba(130,229,255,.18);pointer-events:none}
+#game-table::after{content:"";position:absolute;z-index:-1;left:50%;top:51%;width:min(62vw,880px);height:min(47vh,510px);transform:translate(-50%,-50%);border:2px solid rgba(166,233,255,.16);border-radius:50%;pointer-events:none}
+.ai-player{position:absolute;z-index:5;display:flex;align-items:center;gap:10px}
+.ai-player.top{top:6%;left:50%;transform:translateX(-50%);flex-direction:column;gap:3px}
+.ai-player.left{left:1.6%;top:31%;transform:none;flex-direction:column;align-items:flex-start;gap:5px}
+.ai-player.right{right:1.5%;top:31%;transform:none;flex-direction:column;align-items:flex-end;gap:5px}
+.player-name{position:relative;display:flex;align-items:center;gap:10px;background:linear-gradient(100deg,rgba(13,42,103,.96),rgba(5,23,66,.94));border:1px solid rgba(93,225,255,.65);border-radius:999px;color:#fff;padding:7px 17px 7px 12px;font-size:clamp(12px,1.4vw,20px);font-weight:800;letter-spacing:.015em;white-space:nowrap;box-shadow:0 6px 20px rgba(0,18,77,.38),inset 0 1px 0 rgba(255,255,255,.18);transition:.25s}
+.player-name::before{content:"🤖";width:clamp(34px,5vw,60px);height:clamp(34px,5vw,60px);display:grid;place-items:center;border:2px solid #e6fbff;border-radius:15px;background:linear-gradient(145deg,#a8edff,#356de6);font-size:clamp(20px,3vw,36px);box-shadow:0 0 0 3px rgba(76,195,255,.38),0 5px 14px #052567}
+#name-1::before{content:"🐱";background:linear-gradient(145deg,#ffe5a9,#ff8d3d)}
+#name-2::before{content:"🤖"}
+#name-3::before{content:"🐼";background:linear-gradient(145deg,#9fffe9,#0da788)}
+#name-0::before{content:"🧑🏻‍🚀";background:linear-gradient(145deg,#a1e9ff,#327bff)}
+.player-name.active{border-color:#5ef4ff;box-shadow:0 0 0 2px rgba(75,217,255,.28),0 0 25px rgba(40,209,255,.6),inset 0 1px 0 #fff}
+.ai-player.top .player-name{align-self:center;min-width:150px;justify-content:center;padding-left:12px}
+.ai-player.top .player-name::before{position:absolute;left:-46px;width:40px;height:40px;border-radius:12px;font-size:24px}
+.ai-hand{display:flex;align-items:center;justify-content:center;gap:0}
+.ai-hand.left,.ai-hand.right{flex-direction:row}
+.card-back{position:relative;flex:0 0 auto;width:clamp(27px,3.4vw,48px);height:clamp(40px,5.1vw,70px);border:2px solid #f5fbff;border-radius:9px;background:linear-gradient(145deg,#080a13 0 43%,#f51f31 44% 75%,#080a13 76%);display:flex;align-items:center;justify-content:center;color:#ffed43;font-size:clamp(8px,.85vw,12px);font-weight:1000;font-style:italic;text-shadow:1px 2px 0 #131313,-1px -1px 0 #131313;box-shadow:0 4px 8px rgba(0,14,56,.5);transform-origin:bottom center}
+.card-back::before{content:"UNO";transform:rotate(-18deg)}
+.ai-player.top .card-back{width:clamp(37px,4.5vw,63px);height:clamp(52px,6.8vw,88px);margin-left:-5px}
+.ai-player.top .card-back:first-child{margin-left:0}
+.ai-player.left .card-back,.ai-player.right .card-back{width:clamp(27px,3.2vw,45px);height:clamp(40px,5vw,66px);margin-left:clamp(-12px,-.8vw,-5px)}
+.ai-player.left .card-back:first-child,.ai-player.right .card-back:first-child{margin-left:0}
+.ai-player.left .card-back:nth-child(1){transform:rotate(-15deg) translateY(7px)}.ai-player.left .card-back:nth-child(2){transform:rotate(-10deg) translateY(3px)}.ai-player.left .card-back:nth-child(3){transform:rotate(-5deg)}.ai-player.left .card-back:nth-child(4){transform:rotate(1deg)}.ai-player.left .card-back:nth-child(5){transform:rotate(7deg) translateY(2px)}.ai-player.left .card-back:nth-child(n+6){transform:rotate(12deg) translateY(6px)}
+.ai-player.right .card-back:nth-child(1){transform:rotate(-13deg) translateY(6px)}.ai-player.right .card-back:nth-child(2){transform:rotate(-7deg) translateY(2px)}.ai-player.right .card-back:nth-child(3){transform:rotate(-1deg)}.ai-player.right .card-back:nth-child(4){transform:rotate(5deg)}.ai-player.right .card-back:nth-child(5){transform:rotate(10deg) translateY(3px)}.ai-player.right .card-back:nth-child(n+6){transform:rotate(15deg) translateY(7px)}
+.center-area{position:absolute;left:50%;top:49%;transform:translate(-50%,-50%);display:flex;align-items:center;gap:clamp(22px,4vw,62px);margin:0;z-index:2}
+.draw-pile,.discard-pile{display:flex;flex-direction:column;align-items:center;filter:drop-shadow(0 12px 14px rgba(0,23,85,.42))}
+.pile-label{font-size:clamp(10px,1vw,14px);font-weight:700;color:rgba(229,248,255,.85);text-shadow:0 1px 4px #06469d;margin-top:8px;letter-spacing:.05em}
+.card{width:clamp(62px,8.2vw,112px);height:auto;aspect-ratio:2/3;border:4px solid #fff;border-radius:15px;position:relative;overflow:hidden;flex-shrink:0;cursor:pointer;box-shadow:0 8px 14px rgba(0,20,69,.45),inset 0 0 0 1px rgba(0,0,0,.16);transition:transform .22s,filter .22s,box-shadow .22s}
+.card-inner{width:100%;height:100%;border-radius:10px;position:relative;display:flex;align-items:center;justify-content:center}
+.card-oval{position:absolute;width:76%;height:86%;border-radius:50%;background:#fff;transform:rotate(-22deg);top:7%;left:12%;box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.card-center-value{position:relative;z-index:2;font-size:clamp(29px,4vw,54px);font-weight:1000;font-family:system-ui,"Arial Black",sans-serif;line-height:1;text-shadow:2px 2px 0 rgba(0,0,0,.27),-1px -1px 0 rgba(0,0,0,.18)}
+.card-corner{position:absolute;font-size:clamp(12px,1.65vw,22px);font-weight:1000;z-index:2;line-height:1;text-shadow:1px 1px 0 rgba(0,0,0,.18)}
+.card-corner.tl{top:6px;left:8px}.card-corner.br{bottom:6px;right:8px;transform:rotate(180deg)}
+.card[data-color="red"] .card-inner{background:linear-gradient(145deg,#ff3947,#d50024)}.card[data-color="yellow"] .card-inner{background:linear-gradient(145deg,#ffe64f,#e5b900)}.card[data-color="green"] .card-inner{background:linear-gradient(145deg,#3bd18a,#078449)}.card[data-color="blue"] .card-inner{background:linear-gradient(145deg,#36aaff,#0753d5)}.card[data-color="wild"] .card-inner{background:#111321}
+.card[data-color="red"] .card-center-value,.card[data-color="red"] .card-corner{color:#ed1934}.card[data-color="yellow"] .card-center-value,.card[data-color="yellow"] .card-corner{color:#d4a800}.card[data-color="green"] .card-center-value,.card[data-color="green"] .card-corner{color:#07874b}.card[data-color="blue"] .card-center-value,.card[data-color="blue"] .card-corner{color:#0866da}.card[data-color="wild"] .card-center-value,.card[data-color="wild"] .card-corner{color:#fff}
+.wild-quadrants{position:absolute;width:76%;height:86%;border-radius:50%;transform:rotate(-22deg);top:7%;left:12%;overflow:hidden;z-index:1}.wild-quadrants::before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,var(--red) 50%,var(--blue-card) 50%),linear-gradient(90deg,var(--yellow) 50%,var(--green) 50%);background-size:100% 50%,100% 50%;background-position:0 0,0 100%;background-repeat:no-repeat}
+.draw-pile .card{cursor:pointer;transform:rotate(-10deg);background:#fff;padding:0}.draw-pile .card .card-inner{background:linear-gradient(145deg,#070b19,#080911 52%,#17192a);border:3px solid #fff;justify-content:center}.draw-pile .card .card-inner::after{content:"UNO";color:#ffe23d;font-size:clamp(17px,2.1vw,29px);font-weight:1000;font-style:italic;transform:rotate(-20deg);text-shadow:2px 3px 0 #111,-2px -2px 0 #111}
+#discard-card-container .card{transform:rotate(-6deg) scale(1.04)}
+.player-hand-area{position:absolute;left:0;right:0;bottom:0;display:flex;flex-direction:column;align-items:center;padding:0 3vw 1.5vh;width:100%;overflow:visible;z-index:10}
+#name-0{position:absolute;left:3vw;bottom:clamp(90px,17vh,190px);min-width:170px;justify-content:flex-start;font-size:clamp(15px,1.8vw,24px);border-width:2px;padding:8px 18px 8px 12px}
+#name-0::before{width:clamp(52px,7vw,88px);height:clamp(52px,7vw,88px);border-radius:20px;font-size:clamp(30px,4vw,48px)}
+.player-hand{display:flex;justify-content:center;align-items:flex-end;min-height:clamp(105px,26vh,225px);padding:0 4vw;flex-wrap:nowrap;max-width:100%;overflow:visible;filter:drop-shadow(0 11px 13px rgba(0,23,86,.32))}
+.player-hand .card{width:clamp(58px,10vw,142px);height:auto;aspect-ratio:2/3;margin-left:clamp(-42px,-4.2vw,-19px);transform-origin:bottom center;transition:transform .2s,margin .2s;cursor:default}
+.player-hand .card:first-child{margin-left:0}
+.player-hand .card:nth-child(1){transform:rotate(-12deg) translateY(5px)}.player-hand .card:nth-child(2){transform:rotate(-8deg) translateY(2px)}.player-hand .card:nth-child(3){transform:rotate(-4deg)}.player-hand .card:nth-child(4){transform:rotate(0deg)}.player-hand .card:nth-child(5){transform:rotate(4deg)}.player-hand .card:nth-child(6){transform:rotate(8deg) translateY(2px)}.player-hand .card:nth-child(n+7){transform:rotate(12deg) translateY(6px)}
+.player-hand .card.playable{cursor:pointer;opacity:1;filter:none;box-shadow:0 0 0 1px #fff,0 6px 18px rgba(0,27,91,.48)}
+.player-hand .card.playable:hover,.player-hand .card.playable:active{transform:translateY(-24px) scale(1.06);z-index:100}
+.player-hand .card:not(.playable){opacity:.76;filter:saturate(.83)}
+#message-bar{position:fixed;z-index:24;left:50%;top:16px;transform:translateX(-50%);padding:8px 22px;min-width:150px;max-width:55vw;text-align:center;color:#fff;background:rgba(5,29,84,.77);border:1px solid rgba(143,229,255,.58);border-radius:999px;font-size:clamp(11px,1.15vw,15px);font-weight:750;box-shadow:0 5px 18px rgba(0,17,73,.32);transition:opacity .3s;backdrop-filter:blur(9px)}
+#new-game-btn,#draw-action-btn,#uno-btn{position:fixed;z-index:26;display:flex;align-items:center;justify-content:center;gap:9px;color:white;background:linear-gradient(110deg,rgba(4,33,94,.97),rgba(7,24,75,.97));border:2px solid #2bdcff;border-radius:999px;padding:11px 23px;font-size:clamp(14px,1.5vw,20px);font-weight:850;letter-spacing:.04em;box-shadow:0 0 0 3px rgba(48,196,255,.13),0 8px 22px rgba(0,14,60,.35);cursor:pointer;transition:transform .18s,filter .18s}
+#new-game-btn{top:16px;right:18px;padding:9px 15px;font-size:clamp(11px,1vw,14px);border-color:rgba(154,229,255,.48)}
+#draw-action-btn{right:3vw;bottom:5vh;min-width:145px;min-height:58px}
+.button-icon{font-size:1.45em;line-height:.8}
+#new-game-btn:hover,#draw-action-btn:hover,#uno-btn:hover{transform:translateY(-2px);filter:brightness(1.17)}
+#uno-btn{display:none;right:3vw;bottom:calc(5vh + 72px);min-width:140px;min-height:55px;background:linear-gradient(120deg,#f3323a,#b9002d);border:2px solid #ffef83;animation:unoGlow 1.25s infinite}
+#uno-btn.show{display:flex}
+@keyframes unoGlow{50%{box-shadow:0 0 0 7px rgba(255,227,72,.13),0 0 30px rgba(255,215,58,.55)}}
+#direction-indicator{position:absolute;top:51%;left:50%;transform:translate(-50%,-50%);width:min(48vw,64vh);height:min(48vw,64vh);opacity:.3;z-index:0;pointer-events:none;filter:drop-shadow(0 0 12px rgba(145,235,255,.46))}
+#direction-indicator svg{width:100%;height:100%;transition:transform .5s}#direction-indicator path{stroke:#b7edff!important;stroke-width:7!important;stroke-dasharray:none!important;opacity:.7}#direction-indicator polygon{fill:#b7edff!important}
+.color-picker-overlay,.win-overlay{position:fixed;inset:0;background:rgba(1,13,48,.76);backdrop-filter:blur(9px);display:none;align-items:center;justify-content:center;z-index:1000}.color-picker-overlay.show,.win-overlay.show{display:flex}
+.color-picker,.win-box{background:linear-gradient(145deg,rgba(13,70,160,.98),rgba(4,24,76,.98));padding:clamp(22px,4vw,48px);border-radius:28px;text-align:center;border:1px solid rgba(126,228,255,.76);box-shadow:0 20px 70px rgba(0,13,51,.55),0 0 35px rgba(32,193,255,.22)}
+.color-picker h3{color:#fff;margin-bottom:22px;font-size:clamp(18px,2vw,26px)}.color-options{display:flex;gap:clamp(12px,2vw,22px)}.color-option{width:clamp(52px,6vw,76px);height:clamp(52px,6vw,76px);border-radius:50%;cursor:pointer;border:3px solid rgba(255,255,255,.7);transition:transform .2s,box-shadow .2s;box-shadow:0 5px 13px rgba(0,0,0,.35)}.color-option:hover{transform:scale(1.12);box-shadow:0 0 0 4px #fff,0 0 28px #91ecff}
+.color-option[data-color="red"]{background:var(--red)}.color-option[data-color="yellow"]{background:var(--yellow)}.color-option[data-color="green"]{background:var(--green)}.color-option[data-color="blue"]{background:var(--blue-card)}
+.win-box h1{color:#fff;font-size:clamp(32px,5vw,54px);margin-bottom:10px;text-shadow:0 5px 20px #16aaff}.win-box p{color:#e2f8ff;font-size:clamp(16px,2vw,22px);margin-bottom:25px}.win-box button{background:linear-gradient(90deg,#20bfff,#1475ff);color:#fff;border:1px solid #9ef4ff;padding:13px 34px;border-radius:999px;font-size:18px;font-weight:800;cursor:pointer}
+@media(max-width:720px){.topbar-brand{top:7px;left:9px;font-size:12px}.topbar-brand img{width:27px;height:23px}#message-bar{top:8px;padding:6px 12px;max-width:44vw}.ai-player.top{top:7%}.ai-player.left{left:1%;top:30%}.ai-player.right{right:1%;top:30%}.ai-player.left .player-name,.ai-player.right .player-name{padding:4px 9px 4px 5px;gap:5px;font-size:11px}.ai-player.left .player-name::before,.ai-player.right .player-name::before{width:28px;height:28px;border-radius:9px;font-size:17px}.ai-player.left .card-back,.ai-player.right .card-back{width:clamp(21px,3.3vw,30px);height:clamp(32px,5vw,42px);margin-left:-8px;font-size:8px}.ai-player.top .card-back{width:clamp(29px,5vw,42px);height:clamp(43px,7vw,58px)}#name-0{left:2vw;bottom:clamp(76px,15vh,115px);min-width:0;padding:5px 12px 5px 5px;font-size:13px;gap:5px}#name-0::before{width:42px;height:42px;border-radius:14px;font-size:25px}.player-hand{min-height:clamp(92px,25vh,145px);padding:0 2vw 0 16vw}.player-hand .card{width:clamp(48px,10vw,73px);border-width:3px;border-radius:10px;margin-left:clamp(-25px,-4vw,-14px)}.card-center-value{font-size:clamp(24px,4.8vw,35px)}.card-corner{font-size:clamp(10px,1.7vw,14px)}.center-area{top:49%;gap:clamp(20px,5vw,38px)}.draw-pile .card,#discard-card-container .card{width:clamp(55px,11vw,75px)}#draw-action-btn{right:2vw;bottom:3vh;min-width:106px;min-height:44px;padding:7px 13px;font-size:13px}#new-game-btn{top:7px;right:8px;padding:6px 10px;font-size:10px}#uno-btn{right:2vw;bottom:calc(3vh + 52px);min-width:100px;min-height:42px;padding:7px 12px;font-size:14px}.pile-label{font-size:9px;margin-top:5px}#direction-indicator{width:min(52vw,45vh);height:min(52vw,45vh)}}
+@media(max-height:420px){.ai-player.top{top:4%}.ai-player.left,.ai-player.right{top:29%}.player-hand-area{padding-bottom:0}.player-hand{min-height:22vh}.player-hand .card{width:clamp(45px,8.5vw,78px)}#name-0{bottom:clamp(67px,16vh,95px)}#draw-action-btn{bottom:2vh;min-height:40px}#uno-btn{bottom:calc(2vh + 47px)}}
+</style>
+
+</head>
+<body>
+
+<div class="topbar-brand"><img src="data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiIHN0YW5kYWxvbmU9Im5vIj8+CjwhLS0gR2VuZXJhdG9yOiBBZG9iZSBJbGx1c3RyYXRvciAyMi4xLjAsIFNWRyBFeHBvcnQgUGx1Zy1JbiAuIFNWRyBWZXJzaW9uOiA2LjAwIEJ1aWxkIDApICAtLT4KCjxzdmcKICAgeG1sbnM6ZGM9Imh0dHA6Ly9wdXJsLm9yZy9kYy9lbGVtZW50cy8xLjEvIgogICB4bWxuczpjYz0iaHR0cDovL2NyZWF0aXZlY29tbW9ucy5vcmcvbnMjIgogICB4bWxuczpyZGY9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkvMDIvMjItcmRmLXN5bnRheC1ucyMiCiAgIHhtbG5zOnN2Zz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciCiAgIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIKICAgeG1sbnM6c29kaXBvZGk9Imh0dHA6Ly9zb2RpcG9kaS5zb3VyY2Vmb3JnZS5uZXQvRFREL3NvZGlwb2RpLTAuZHRkIgogICB4bWxuczppbmtzY2FwZT0iaHR0cDovL3d3dy5pbmtzY2FwZS5vcmcvbmFtZXNwYWNlcy9pbmtzY2FwZSIKICAgdmVyc2lvbj0iMS4xIgogICBpZD0iTGF5ZXJfMSIKICAgeD0iMHB4IgogICB5PSIwcHgiCiAgIHZpZXdCb3g9IjAgMCA1NTAgMzg1LjU3MTE0IgogICB4bWw6c3BhY2U9InByZXNlcnZlIgogICBzb2RpcG9kaTpkb2NuYW1lPSJVTk8gTG9nby5zdmciCiAgIHdpZHRoPSI1NTAiCiAgIGhlaWdodD0iMzg1LjU3MTE0IgogICBpbmtzY2FwZTp2ZXJzaW9uPSIwLjkyLjMgKDI0MDU1NDYsIDIwMTgtMDMtMTEpIj48bWV0YWRhdGEKICAgaWQ9Im1ldGFkYXRhNTEiPjxyZGY6UkRGPjxjYzpXb3JrCiAgICAgICByZGY6YWJvdXQ9IiI+PGRjOmZvcm1hdD5pbWFnZS9zdmcreG1sPC9kYzpmb3JtYXQ+PGRjOnR5cGUKICAgICAgICAgcmRmOnJlc291cmNlPSJodHRwOi8vcHVybC5vcmcvZGMvZGNtaXR5cGUvU3RpbGxJbWFnZSIgLz48ZGM6dGl0bGU+PC9kYzp0aXRsZT48L2NjOldvcms+PC9yZGY6UkRGPjwvbWV0YWRhdGE+PGRlZnMKICAgaWQ9ImRlZnM0OSIgLz48c29kaXBvZGk6bmFtZWR2aWV3CiAgIHBhZ2Vjb2xvcj0iI2ZmZmZmZiIKICAgYm9yZGVyY29sb3I9IiM2NjY2NjYiCiAgIGJvcmRlcm9wYWNpdHk9IjEiCiAgIG9iamVjdHRvbGVyYW5jZT0iMTAiCiAgIGdyaWR0b2xlcmFuY2U9IjEwIgogICBndWlkZXRvbGVyYW5jZT0iMTAiCiAgIGlua3NjYXBlOnBhZ2VvcGFjaXR5PSIwIgogICBpbmtzY2FwZTpwYWdlc2hhZG93PSIyIgogICBpbmtzY2FwZTp3aW5kb3ctd2lkdGg9IjE5MjAiCiAgIGlua3NjYXBlOndpbmRvdy1oZWlnaHQ9IjEwMTciCiAgIGlkPSJuYW1lZHZpZXc0NyIKICAgc2hvd2dyaWQ9ImZhbHNlIgogICBpbmtzY2FwZTp6b29tPSIwLjU5NTk1OTYiCiAgIGlua3NjYXBlOmN4PSIyNi41MzI2NCIKICAgaW5rc2NhcGU6Y3k9IjQxNC4xNzAxMyIKICAgaW5rc2NhcGU6d2luZG93LXg9Ii04IgogICBpbmtzY2FwZTp3aW5kb3cteT0iLTgiCiAgIGlua3NjYXBlOndpbmRvdy1tYXhpbWl6ZWQ9IjEiCiAgIGlua3NjYXBlOmN1cnJlbnQtbGF5ZXI9IkxheWVyXzEiIC8+CjxzdHlsZQogICB0eXBlPSJ0ZXh0L2NzcyIKICAgaWQ9InN0eWxlMiI+Cgkuc3Qwe2ZpbGwtcnVsZTpldmVub2RkO2NsaXAtcnVsZTpldmVub2RkO2ZpbGw6I0VEMUMyNDt9Cgkuc3Qxe2ZpbGw6I0ZGRkZGRjt9Cgkuc3Qye2ZpbGwtcnVsZTpldmVub2RkO2NsaXAtcnVsZTpldmVub2RkO30KCS5zdDN7ZmlsbC1ydWxlOmV2ZW5vZGQ7Y2xpcC1ydWxlOmV2ZW5vZGQ7ZmlsbDojRkZGRkZGO30KCS5zdDR7ZmlsbC1ydWxlOmV2ZW5vZGQ7Y2xpcC1ydWxlOmV2ZW5vZGQ7ZmlsbDojRjhEQTI3O30KCS5zdDV7ZmlsbC1ydWxlOmV2ZW5vZGQ7Y2xpcC1ydWxlOmV2ZW5vZGQ7ZmlsbDojNTg1ODVBO30KPC9zdHlsZT4KPGcKICAgaWQ9Imc0NCIKICAgdHJhbnNmb3JtPSJtYXRyaXgoMy4wNTY1NjI5LDAsMCwzLjA1NjU2MjksLTY1OS45OTE5LC0xMDE3Ljc0MTcpIj4KCTxwYXRoCiAgIGNsYXNzPSJzdDAiCiAgIGQ9Im0gMjg1LjksMzQ0LjEgYyAyMC45LC0xMS4xIDQzLjQsLTEzLjQgNjEuOCwtOS4xIDQxLjksOS45IDQ1LjIsNDEuNCAyMi45LDczLjkgLTEwLjIsMTQuOSAtMjUuMywyOS4yIC00My41LDM4LjIgLTI5LjksMTQuOCAtNTguNSwxNS42IC03Ny4zLDQuMiAtMTguOSwtMTEuNCAtMjMuNCwtMzAuNiAtMTYuNywtNTEgNi45LC0yMS4yIDI2LjIsLTQzIDUyLjgsLTU2LjIgeiIKICAgaWQ9InBhdGg0IgogICBpbmtzY2FwZTpjb25uZWN0b3ItY3VydmF0dXJlPSIwIgogICBzdHlsZT0iY2xpcC1ydWxlOmV2ZW5vZGQ7ZmlsbDojZWQxYzI0O2ZpbGwtcnVsZTpldmVub2RkIiAvPgoJPHBhdGgKICAgY2xhc3M9InN0MSIKICAgZD0ibSAzNTEuNywzNjguMiB2IDAgYyAtMC4xLDEuMiAtMC4xLDIuNCAwLjEsMy42IDAuMiwxLjMgMC41LDIuNyAxLDQgMC43LDEuOSAxLjcsMy42IDIuOCw1IDEsMS4zIDIuMiwyLjMgMy42LDMuMSAxLjcsMC43IDMuMywxLjEgNC42LDEgMS4xLDAgMS45LC0wLjMgMi41LC0wLjggMC40LC0wLjQgMC43LC0xIDAuOCwtMS44IDAuMiwtMS4xIDAsLTIuNSAtMC4zLC00LjMgLTAuMSwtMC41IC0wLjIsLTAuOSAtMC4zLC0xLjQgLTAuMSwtMC40IC0wLjMsLTAuOSAtMC40LC0xLjMgLTAuOSwtMi4zIC0yLjEsLTQuNCAtMy42LC02IC0xLjMsLTEuNCAtMi45LC0yLjQgLTQuNiwtMi45IC0xLjgsLTAuNSAtMy4zLC0wLjUgLTQuNCwtMC4xIC0wLjcsMC4zIC0xLjMsMC44IC0xLjYsMS42IHogTSAzNTAuOSwzNDAgYyA4LjksLTMuMyAxNy43LC0yLjYgMjUuMiwxLjEgNy44LDMuOCAxNC4xLDEwLjkgMTcuNCwxOS44IDEuOSw1IDIuNiwxMC4yIDIuMywxNS4xIC0wLjMsNSAtMS42LDkuOCAtNCwxNC4xIC0wLjEsMC4yIC0wLjIsMC41IC0wLjUsMC45IC0wLjIsMC40IC0wLjQsMC43IC0wLjUsMC45IC0zLjYsNS45IC03LjMsMTAuMiAtMTEsMTMuMyAtMy44LDMuMSAtNy41LDUuMSAtMTEuMiw2LjUgLTkuMSwzLjQgLTE4LjEsMi43IC0yNS43LC0xIC04LC0zLjkgLTE0LjQsLTEwLjkgLTE3LjcsLTE5LjkgLTEuOCwtNC45IC0yLjcsLTkuOCAtMi41LC0xNC41IDAuMiwtNC44IDEuMywtOS40IDMuNCwtMTMuNyAxLjYsLTMuMiA0LjEsLTYuOSA3LjQsLTEwLjQgMi45LC0zLjEgNi40LC02LjEgMTAuMywtOC43IHYgMCBjIDEsLTAuNyAyLjEsLTEuMyAzLjIsLTEuOSAxLjUsLTAuNiAyLjcsLTEuMiAzLjksLTEuNiB6IgogICBpZD0icGF0aDYiCiAgIGlua3NjYXBlOmNvbm5lY3Rvci1jdXJ2YXR1cmU9IjAiCiAgIHN0eWxlPSJmaWxsOiNmZmZmZmYiIC8+Cgk8cGF0aAogICBjbGFzcz0ic3QxIgogICBkPSJtIDMwOS4zLDM1Ni40IDE1LjIsLTUuNyBjIDEuNCwtMC41IDIuOSwwLjIgMy40LDEuNiAwLDAuMSAwLjEsMC4xIDAuMSwwLjIgbCAyMS42LDU3LjcgYyAwLjIsMC4zIDAuMywwLjcgMC4zLDEuMSAwLjEsMC44IC0wLjIsMS42IC0wLjgsMi4xIGwgLTcuMSw3LjEgYyAtMC4zLDAuMyAtMC42LDAuNSAtMSwwLjYgbCAtMTIuNSw0LjYgYyAtMC44LDAuMyAtMS43LDAuMiAtMi40LC0wLjMgdiAwIEwgMzEyLDQxNiBsIDIuNyw3LjEgYyAwLjIsMC40IDAuNCwwLjkgMC40LDEuNCAwLDAuNyAtMC4zLDEuNCAtMC44LDEuOCBsIC03LjEsNy4xIGMgLTAuMywwLjMgLTAuNiwwLjUgLTAuOSwwLjYgdiAwIGwgLTE1LjMsNS43IGMgLTEuNCwwLjUgLTIuOSwtMC4yIC0zLjQsLTEuNiBsIC0yMS44LC01OC4zIGMgLTAuNCwtMS4xIC0wLjEsLTIuMyAwLjgsLTMgbCA2LjksLTYuOSBjIDAuMywtMC4zIDAuNiwtMC41IDEsLTAuNiBsIDEzLjMsLTQuOSBjIDAuOCwtMC4zIDEuNywtMC4yIDIuNCwwLjMgdiAwIGwgMTMsOC41IC0yLjQsLTYuNCBjIC0wLjQsLTEgLTAuMSwtMi4xIDAuNiwtMi44IGwgNywtNy4xIGMgMC4zLC0wLjIgMC42LC0wLjQgMC45LC0wLjUgeiIKICAgaWQ9InBhdGg4IgogICBpbmtzY2FwZTpjb25uZWN0b3ItY3VydmF0dXJlPSIwIgogICBzdHlsZT0iZmlsbDojZmZmZmZmIiAvPgoJPHBhdGgKICAgY2xhc3M9InN0MSIKICAgZD0ibSAyNTcuNSw0NTEuOSBjIC02LDAuNiAtMTEuMiwtMC41IC0xNS43LC0zLjIgLTYuMSwtMy42IC0xMC42LC05LjkgLTEzLjcsLTE4IGwgLTEyLC0zMi4yIGMgLTAuNCwtMS4xIC0wLjEsLTIuMyAwLjgsLTMgbCA2LjksLTYuOSBjIDAuMywtMC4zIDAuNiwtMC41IDAuOSwtMC42IHYgMCBsIDE1LjMsLTUuNyBjIDEuNCwtMC41IDIuOSwwLjIgMy40LDEuNiBsIDEyLjMsMzIuOSBjIDAuNywxLjkgMS43LDMuNyAzLjEsNC45IDEsMC45IDIuMywxLjUgMy45LDEuNiAwLjMsMCAwLjcsMCAxLDAgMCwtMC42IC0wLjEsLTEuMiAtMC4yLC0xLjggLTAuMiwtMC45IC0wLjQsLTEuOCAtMC44LC0yLjggbCAtMTIuMywtMzIuOSBjIC0wLjQsLTEuMSAtMC4xLC0yLjMgMC44LC0zIGwgNi43LC02LjcgYyAwLjMsLTAuNCAwLjcsLTAuNyAxLjIsLTAuOSBsIDE1LjMsLTUuNyBjIDEuNCwtMC41IDIuOSwwLjIgMy40LDEuNiBsIDEyLjIsMzIuNiBjIDEuOSw1IDIuOCw5LjggMi43LDE0LjMgLTAuMSw0LjUgLTEuMSw4LjcgLTMuMiwxMi41IC0xLjcsMyAtNC45LDYuMSAtOC4xLDkuMiAtMC43LDAuNyAtMS41LDEuNCAtMi4xLDIgbCAtMC4xLDAuMSBjIC0xLjIsMS4zIC0yLjYsMi41IC00LjEsMy41IC01LjEsMy42IC0xMS4yLDUuOSAtMTcuNiw2LjYgeiIKICAgaWQ9InBhdGgxMCIKICAgaW5rc2NhcGU6Y29ubmVjdG9yLWN1cnZhdHVyZT0iMCIKICAgc3R5bGU9ImZpbGw6I2ZmZmZmZiIgLz4KCTxwb2x5Z29uCiAgIGNsYXNzPSJzdDIiCiAgIHBvaW50cz0iMzI3LjYsNDIzLjIgMzA2LjcsNDA5LjMgMzEyLjMsNDI0LjUgMzEyLjMsNDI0LjUgMzEyLjQsNDI0LjUgMzA1LjMsNDMxLjUgMjkwLDQzNy4zIDI2OC4yLDM3OSAyNzUuMywzNzEuOSAyODguNywzNjcgMzA4LjQsMzc5LjkgMzAzLjIsMzY2IDMxMC4yLDM1OC45IDMyNS40LDM1My4yIDM0Ny4zLDQxMS41IDM0MC4yLDQxOC42ICIKICAgaWQ9InBvbHlnb24xMiIKICAgc3R5bGU9ImNsaXAtcnVsZTpldmVub2RkO2ZpbGwtcnVsZTpldmVub2RkIiAvPgoJPHBhdGgKICAgY2xhc3M9InN0MiIKICAgZD0ibSAzNTEuOSwzNDIuNSBjIDE2LjcsLTYuMiAzMy4yLDMuMiAzOS4yLDE5LjMgMy41LDkuMyAyLjgsMTkuMyAtMS41LDI3LjIgLTAuMiwwLjUgLTAuNSwxIC0wLjgsMS41IC02LjksMTEuNCAtMTQsMTYuMSAtMjAuOSwxOC43IC0xNy4yLDYuNCAtMzMuOSwtMy4yIC00MCwtMTkuMyAtMy40LC05LjIgLTMuMSwtMTguMiAwLjgsLTI2LjEgMi44LC01LjcgOC45LC0xMi45IDE2LjgsLTE4LjEgdiAwIGMgMS45LC0xLjMgNC4xLC0yLjQgNi40LC0zLjIgeiBtIC0yLjgsMjUuMiBjIDAsLTAuMSAwLjEsLTAuMiAwLjEsLTAuMyAxLjEsLTMuNiA0LjcsLTQuNyA5LjIsLTMuNSA0LjYsMS4yIDguMSw1LjUgMTAsMTAuNSAwLjQsMSAwLjcsMiAwLjksMy4xIDAuOSw0LjEgMC41LDcgLTEuMiw4LjYgLTIsMS45IC01LjcsMiAtOS45LDAuMiAtMy41LC0xLjkgLTYuMiwtNS40IC03LjgsLTkuNiAtMS4yLC0zIC0xLjYsLTYuMSAtMS4zLC05IHoiCiAgIGlkPSJwYXRoMTQiCiAgIGlua3NjYXBlOmNvbm5lY3Rvci1jdXJ2YXR1cmU9IjAiCiAgIHN0eWxlPSJjbGlwLXJ1bGU6ZXZlbm9kZDtmaWxsLXJ1bGU6ZXZlbm9kZCIgLz4KCTxwb2x5Z29uCiAgIGNsYXNzPSJzdDIiCiAgIHBvaW50cz0iMzAwLjksMzkzLjcgMzEyLjMsNDI0LjUgMjk3LDQzMC4yIDI3NS4zLDM3MS45IDI4OC43LDM2NyAzMjEuMiwzODguMiAzMTAuMiwzNTguOSAzMjUuNCwzNTMuMiAzNDcuMyw0MTEuNSAzMzQuNyw0MTYuMSAiCiAgIGlkPSJwb2x5Z29uMTYiCiAgIHN0eWxlPSJjbGlwLXJ1bGU6ZXZlbm9kZDtmaWxsLXJ1bGU6ZXZlbm9kZCIgLz4KCTxwb2x5Z29uCiAgIGNsYXNzPSJzdDMiCiAgIHBvaW50cz0iMjk2LjgsMzg4LjYgMzA5LjgsNDIzLjMgMjk4LjIsNDI3LjYgMjc3LjksMzczLjEgMjg4LjQsMzY5LjIgMzI1LjIsMzkzLjMgMzEyLjgsMzYwLjEgMzI0LjIsMzU1LjggMzQ0LjcsNDEwLjMgMzM0LjksNDEzLjkgIgogICBpZD0icG9seWdvbjE4IgogICBzdHlsZT0iY2xpcC1ydWxlOmV2ZW5vZGQ7ZmlsbDojZmZmZmZmO2ZpbGwtcnVsZTpldmVub2RkIiAvPgoJPHBvbHlnb24KICAgY2xhc3M9InN0NCIKICAgcG9pbnRzPSIzMTQuNiwzNjAuOSAzMjMuNCwzNTcuNiAzNDIuOCw0MDkuNSAzMzUuMSw0MTIuMyAyOTQsMzg1IDMwOCw0MjIuNSAyOTkuMSw0MjUuOCAyNzkuNywzNzQgMjg4LjIsMzcwLjggMzI4LDM5Ni44ICIKICAgaWQ9InBvbHlnb24yMCIKICAgc3R5bGU9ImNsaXAtcnVsZTpldmVub2RkO2ZpbGw6I2Y4ZGEyNztmaWxsLXJ1bGU6ZXZlbm9kZCIgLz4KCTxwYXRoCiAgIGNsYXNzPSJzdDIiCiAgIGQ9Im0gMzUxLjksMzQyLjUgYyAxNi43LC02LjIgMzMuMiwzLjIgMzkuMiwxOS4zIDYsMTYuMSAtMC4zLDM0LjEgLTE2LjksNDAuMyAtMTYuNyw2LjIgLTMzLjIsLTMuMiAtMzkuMiwtMTkuMyAtNi4xLC0xNi4yIDAuMiwtMzQuMSAxNi45LC00MC4zIHogbSA1LjUsMTQuNyBjIC04LjQsMy4xIC05LjksMTEuNyAtNywxOS41IDIuOSw3LjcgOS42LDEzLjIgMTguMSwxMC4xIDguNCwtMy4yIDkuOSwtMTEuNyA3LC0xOS41IC0zLC03LjcgLTkuNywtMTMuMiAtMTguMSwtMTAuMSB6IgogICBpZD0icGF0aDIyIgogICBpbmtzY2FwZTpjb25uZWN0b3ItY3VydmF0dXJlPSIwIgogICBzdHlsZT0iY2xpcC1ydWxlOmV2ZW5vZGQ7ZmlsbC1ydWxlOmV2ZW5vZGQiIC8+Cgk8cGF0aAogICBjbGFzcz0ic3QzIgogICBkPSJtIDM1Mi42LDM0NC40IGMgMTUuNiwtNS44IDMxLDMgMzYuNywxOC4yIDUuNiwxNS4xIC0wLjIsMzEuOSAtMTUuOCwzNy44IC0xNS42LDUuOCAtMzEsLTMuMSAtMzYuNywtMTguMiAtNS42LC0xNS4yIDAuMSwtMzIgMTUuOCwtMzcuOCB6IG0gNC4xLDEwLjkgYyAtOS41LDMuNSAtMTEuNSwxMy4zIC04LjIsMjIuMSAzLjMsOC44IDExLjEsMTQuOCAyMC43LDExLjMgOS41LC0zLjYgMTEuNSwtMTMuMyA4LjIsLTIyIC0zLjQsLTguOCAtMTEuMiwtMTQuOSAtMjAuNywtMTEuNCB6IgogICBpZD0icGF0aDI0IgogICBpbmtzY2FwZTpjb25uZWN0b3ItY3VydmF0dXJlPSIwIgogICBzdHlsZT0iY2xpcC1ydWxlOmV2ZW5vZGQ7ZmlsbDojZmZmZmZmO2ZpbGwtcnVsZTpldmVub2RkIiAvPgoJPHBhdGgKICAgY2xhc3M9InN0NCIKICAgZD0ibSAzNTYuMiwzNTQgYyA5LjksLTMuNyAxOC43LDIuMiAyMi40LDEyLjEgMy43LDkuOSAwLjksMjAuMSAtOSwyMy44IC05LjksMy43IC0xOC44LC0yLjIgLTIyLjUsLTEyLjEgLTMuNywtOS44IC0wLjgsLTIwLjEgOS4xLC0yMy44IHogbSAtMy4xLC04LjMgYyAxNC42LC01LjUgMjkuNCwyLjYgMzQuOSwxNy4zIDUuNSwxNC43IC0wLjQsMzAuNSAtMTQuOSwzNS45IC0xNC42LDUuNCAtMjkuNCwtMi42IC0zNC45LC0xNy4zIC01LjYsLTE0LjcgMC4yLC0zMC41IDE0LjksLTM1LjkgeiIKICAgaWQ9InBhdGgyNiIKICAgaW5rc2NhcGU6Y29ubmVjdG9yLWN1cnZhdHVyZT0iMCIKICAgc3R5bGU9ImNsaXAtcnVsZTpldmVub2RkO2ZpbGw6I2Y4ZGEyNztmaWxsLXJ1bGU6ZXZlbm9kZCIgLz4KCTxwYXRoCiAgIGNsYXNzPSJzdDIiCiAgIGQ9Im0gMjU1LjksNDQ5LjQgYyAtMTIsMC43IC0yMC41LC03IC0yNS4yLC0xOS43IGwgLTEyLC0zMi4yIDcsLTcuMSAxNS4zLC01LjcgMTIuMywzMi45IGMgMS42LDQuMiA0LjUsNy45IDkuNCw4LjEgMS40LDAuMSAzLjMsLTAuMSAzLjcsLTEuOSAwLjEsLTIuMSAtMC4zLC00LjIgLTEuMSwtNi4yIGwgLTEyLjMsLTMyLjkgNy4xLC03LjEgdiAwIDAgMCAwIGwgMTUuMiwtNS43IDEyLjIsMzIuNiBjIDMuNSw5LjQgMy41LDE3LjggLTAuMywyNC42IC0xLjgsMy4yIC02LjEsNyAtOS43LDEwLjYgdiAwIGMgLTUuNSw1LjggLTEzLjgsOS4zIC0yMS42LDkuNyB6IgogICBpZD0icGF0aDI4IgogICBpbmtzY2FwZTpjb25uZWN0b3ItY3VydmF0dXJlPSIwIgogICBzdHlsZT0iY2xpcC1ydWxlOmV2ZW5vZGQ7ZmlsbC1ydWxlOmV2ZW5vZGQiIC8+Cgk8cGF0aAogICBjbGFzcz0ic3QyIgogICBkPSJtIDI3Niw0MzguNyAwLjEsMC4yIC0zLjIsMS4yIGMgLTAuMSwwIC0wLjIsMC4xIC0wLjIsMC4xIC0wLjEsMCAtMC4yLDAuMSAtMC4zLDAuMSBsIC0zLjIsMS4yIC0wLjEsLTAuMiBjIC0xNS4zLDQgLTI1LjgsLTQgLTMxLjMsLTE4LjcgbCAtMTIsLTMyLjIgMTUuMywtNS43IDEyLjMsMzIuOSBjIDEuNiw0LjIgNC41LDcuOSA5LjQsOC4xIDEuNCwwLjEgMi45LC0wLjIgNC4yLC0wLjcgMS40LC0wLjUgMi43LC0xLjMgMy43LC0yLjMgMy41LC0zLjMgMy4zLC04IDEuNywtMTIuMiBsIC0xMi40LC0zMi45IDE1LjMsLTUuNyAxMi4yLDMyLjYgYyA1LjUsMTQuOCAyLjgsMjcuMyAtMTEuNSwzNC4yIHoiCiAgIGlkPSJwYXRoMzAiCiAgIGlua3NjYXBlOmNvbm5lY3Rvci1jdXJ2YXR1cmU9IjAiCiAgIHN0eWxlPSJjbGlwLXJ1bGU6ZXZlbm9kZDtmaWxsLXJ1bGU6ZXZlbm9kZCIgLz4KCTxwYXRoCiAgIGNsYXNzPSJzdDMiCiAgIGQ9Im0gMjczLjQsNDM3LjcgdiAwIGwgLTEuMywwLjUgYyAtMC4xLDAgLTAuMiwwLjEgLTAuMywwLjEgLTAuMSwwIC0wLjIsMC4xIC0wLjMsMC4xIGwgLTEuMywwLjUgdiAwIEMgMjU1LDQ0My43IDI0NC45LDQzNi40IDIzOS42LDQyMiBsIC0xMS4zLC0zMC4zIDExLjUsLTQuMyAxMS42LDMxIGMgMS45LDUgNS41LDkuMiAxMS4yLDkuNCAxLjcsMC4xIDMuNCwtMC4yIDUsLTAuOCAxLjYsLTAuNiAzLjIsLTEuNSA0LjQsLTIuNyA0LjEsLTMuOSA0LjEsLTkuNCAyLjIsLTE0LjQgbCAtMTEuNiwtMzEgMTEuNSwtNC4zIDExLjUsMzAuNyBjIDUuNCwxNC40IDIuNSwyNi4xIC0xMi4yLDMyLjQgeiIKICAgaWQ9InBhdGgzMiIKICAgaW5rc2NhcGU6Y29ubmVjdG9yLWN1cnZhdHVyZT0iMCIKICAgc3R5bGU9ImNsaXAtcnVsZTpldmVub2RkO2ZpbGw6I2ZmZmZmZjtmaWxsLXJ1bGU6ZXZlbm9kZCIgLz4KCTxwYXRoCiAgIGNsYXNzPSJzdDQiCiAgIGQ9Im0gMjMwLjEsMzkyLjUgOC45LC0zLjMgMTEuMSwyOS43IGMgMy43LDkuOCAxMS41LDExLjggMTgsOS40IDYuNSwtMi41IDExLjIsLTkuMSA3LjQsLTE4LjkgbCAtMTEuMSwtMjkuNyA4LjksLTMuMyAxMSwyOS40IGMgNC40LDExLjcgNC40LDI0LjUgLTEyLjcsMzEuMiB2IDAgYyAtMC4xLDAgLTAuMiwwLjEgLTAuMywwLjEgLTAuMSwwIC0wLjIsMC4xIC0wLjMsMC4xIHYgMCBjIC0xNi44LDYgLTI1LjcsLTMuNiAtMzAuMiwtMTUuNiB6IgogICBpZD0icGF0aDM0IgogICBpbmtzY2FwZTpjb25uZWN0b3ItY3VydmF0dXJlPSIwIgogICBzdHlsZT0iY2xpcC1ydWxlOmV2ZW5vZGQ7ZmlsbDojZjhkYTI3O2ZpbGwtcnVsZTpldmVub2RkIiAvPgoJPHBhdGgKICAgY2xhc3M9InN0NSIKICAgZD0ibSAzMDUuNSwzNjYuNCA1LjUsLTUuNiAzLjEsOC4zIC01LjUsNS42IHogbSA0LjEsMTEuMSA1LjUsLTUuNiAxLjIsMy4xIC01LjUsNS42IHoiCiAgIGlkPSJwYXRoMzYiCiAgIGlua3NjYXBlOmNvbm5lY3Rvci1jdXJ2YXR1cmU9IjAiCiAgIHN0eWxlPSJjbGlwLXJ1bGU6ZXZlbm9kZDtmaWxsOiM1ODU4NWE7ZmlsbC1ydWxlOmV2ZW5vZGQiIC8+Cgk8cGF0aAogICBjbGFzcz0ic3Q1IgogICBkPSJtIDI1NS4zLDM4NS4yIDUuNSwtNS42IDMuMSw4LjMgLTUuNSw1LjYgeiBtIDQuMSwxMS4xIDUuNSwtNS42IDEuMiwzLjEgLTUuNSw1LjYgeiIKICAgaWQ9InBhdGgzOCIKICAgaW5rc2NhcGU6Y29ubmVjdG9yLWN1cnZhdHVyZT0iMCIKICAgc3R5bGU9ImNsaXAtcnVsZTpldmVub2RkO2ZpbGw6IzU4NTg1YTtmaWxsLXJ1bGU6ZXZlbm9kZCIgLz4KCTxwYXRoCiAgIGNsYXNzPSJzdDUiCiAgIGQ9Im0gMjI3LjksNDE2LjcgNS41LC01LjYgMy4xLDguMyAtNS41LDUuNiB6IG0gNC4yLDExLjEgNS41LC01LjYgdiAwIGwgMC4yLDAuNCBjIDAuNCwwLjkgMC43LDEuOCAxLjEsMi43IGwgLTUuNiw1LjYgeiIKICAgaWQ9InBhdGg0MCIKICAgaW5rc2NhcGU6Y29ubmVjdG9yLWN1cnZhdHVyZT0iMCIKICAgc3R5bGU9ImNsaXAtcnVsZTpldmVub2RkO2ZpbGw6IzU4NTg1YTtmaWxsLXJ1bGU6ZXZlbm9kZCIgLz4KCTxwYXRoCiAgIGNsYXNzPSJzdDUiCiAgIGQ9Im0gMzY0LjIsMzY0LjcgNS42LC01LjYgYyAyLDEuNiAzLjcsMy45IDQuOSw2LjUgbCAtNS41LDUuNSBjIC0xLjIsLTIuNCAtMi45LC00LjcgLTUsLTYuNCB6IG0gNi4yLDkuMSA1LjQsLTUuNSBjIDAuNCwxLjIgMC42LDIuMyAwLjgsMy41IGwgLTUuMyw1LjMgViAzNzcgYyAtMC4yLC0xIC0wLjUsLTIuMSAtMC45LC0zLjIgeiIKICAgaWQ9InBhdGg0MiIKICAgaW5rc2NhcGU6Y29ubmVjdG9yLWN1cnZhdHVyZT0iMCIKICAgc3R5bGU9ImNsaXAtcnVsZTpldmVub2RkO2ZpbGw6IzU4NTg1YTtmaWxsLXJ1bGU6ZXZlbm9kZCIgLz4KPC9nPgo8L3N2Zz4=" alt="UNO"><span>UNO</span></div>
+<div id="game-table">
+  <!-- 方向指示器 -->
+  <div class="direction-indicator" id="direction-indicator">
+    <svg viewBox="0 0 200 200">
+      <path d="M100,20 A80,80 0 1,1 20,100" fill="none" stroke="#fff" stroke-width="3" stroke-dasharray="8,6"/>
+      <polygon points="20,100 30,85 30,115" fill="#fff"/>
+      <polygon points="100,20 85,30 115,30" fill="#fff"/>
+    </svg>
+  </div>
+
+  <!-- AI 玩家 -->
+  <div class="ai-player top" id="player-2">
+    <div class="player-name" id="name-2">電腦 2</div>
+    <div class="ai-hand" id="hand-2"></div>
+  </div>
+
+  <div class="ai-player left" id="player-1">
+    <div class="player-name" id="name-1">電腦 1</div>
+    <div class="ai-hand" id="hand-1"></div>
+  </div>
+
+  <div class="ai-player right" id="player-3">
+    <div class="player-name" id="name-3">電腦 3</div>
+    <div class="ai-hand" id="hand-3"></div>
+  </div>
+
+  <!-- 中央區域 -->
+  <div class="center-area">
+    <div class="draw-pile">
+      <div class="card" id="draw-card" onclick="onDrawClick()">
+        <div class="card-inner"></div>
+      </div>
+      <div class="pile-label">抽牌堆</div>
+    </div>
+    <div class="discard-pile">
+      <div id="discard-card-container"></div>
+      <div class="pile-label">棄牌堆</div>
+    </div>
+  </div>
+
+  <!-- 玩家手牌 -->
+  <div class="player-hand-area">
+    <div class="player-name" id="name-0" style="margin-bottom: 5px;">你</div>
+    <div class="player-hand" id="hand-0"></div>
+  </div>
+</div>
+
+<!-- 訊息列 -->
+<div id="message-bar">遊戲開始！</div>
+
+<!-- 新遊戲按鈕 -->
+<button id="new-game-btn" onclick="startNewGame()"><span class="button-icon">⟳</span> 新遊戲</button>
+<button id="draw-action-btn" onclick="onDrawClick()"><span class="button-icon">▤</span> 抽牌</button>
+
+<!-- UNO 按鈕 -->
+<button id="uno-btn" onclick="callUno()">UNO!</button>
+
+<!-- 顏色選擇器 -->
+<div class="color-picker-overlay" id="color-picker-overlay">
+  <div class="color-picker">
+    <h3>選擇一個顏色</h3>
+    <div class="color-options">
+      <div class="color-option" data-color="red" onclick="selectColor('red')"></div>
+      <div class="color-option" data-color="yellow" onclick="selectColor('yellow')"></div>
+      <div class="color-option" data-color="green" onclick="selectColor('green')"></div>
+      <div class="color-option" data-color="blue" onclick="selectColor('blue')"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 勝利畫面 -->
+<div class="win-overlay" id="win-overlay">
+  <div class="win-box">
+    <h1 id="win-title">恭喜！</h1>
+    <p id="win-message">你贏了！</p>
+    <button onclick="startNewGame()">再玩一次</button>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// 遊戲資料模型
+// ============================================================
+const COLORS = ['red', 'yellow', 'green', 'blue'];
+const COLOR_NAMES = { red: '紅色', yellow: '黃色', green: '綠色', blue: '藍色' };
+const PLAYER_NAMES = ['你', '電腦 1', '電腦 2', '電腦 3'];
+
+let state = {
+  players: [[], [], [], []],   // 每位玩家的手牌
+  deck: [],
+  discardPile: [],
+  currentPlayer: 0,
+  direction: 1,                // 1 = 順時針, -1 = 逆時針
+  currentColor: null,         // 當前要出的顏色
+  isBusy: false,               // 防止重複操作
+  gameOver: false,
+  pendingWildCard: null,       // 等待選顏色的 Wild 卡
+  unoCalled: [false, false, false, false], // 是否已喊 UNO
+  drawnThisTurn: false,        // 本回合是否已抽過牌
+};
+
+// ============================================================
+// 建立牌堆
+// ============================================================
+function createDeck() {
+  const deck = [];
+  for (const color of COLORS) {
+    // 數字牌：0 一張, 1-9 各兩張
+    deck.push({ color, type: 'number', value: 0 });
+    for (let v = 1; v <= 9; v++) {
+      deck.push({ color, type: 'number', value: v });
+      deck.push({ color, type: 'number', value: v });
+    }
+    // 功能牌各兩張
+    for (let i = 0; i < 2; i++) {
+      deck.push({ color, type: 'skip', value: null });
+      deck.push({ color, type: 'reverse', value: null });
+      deck.push({ color, type: 'draw2', value: null });
+    }
+  }
+  // Wild 卡各 4 張
+  for (let i = 0; i < 4; i++) {
+    deck.push({ color: 'wild', type: 'wild', value: null });
+    deck.push({ color: 'wild', type: 'wild4', value: null });
+  }
+  return deck;
+}
+
+// ============================================================
+// 洗牌
+// ============================================================
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+// ============================================================
+// 判斷是否能出這張牌
+// ============================================================
+function canPlay(card) {
+  const top = state.discardPile[state.discardPile.length - 1];
+  if (!top) return true;
+  if (card.color === 'wild') return true;
+  if (card.color === state.currentColor) return true;
+  if (card.type === 'number' && top.type === 'number' && card.value === top.value) return true;
+  if (card.type !== 'number' && card.type === top.type) return true;
+  return false;
+}
+
+// ============================================================
+// 抽一張牌
+// ============================================================
+function drawFromDeck() {
+  if (state.deck.length === 0) {
+    // 回收棄牌堆（保留最上面一張）
+    if (state.discardPile.length <= 1) return null;
+    const top = state.discardPile.pop();
+    state.deck = shuffle(state.discardPile);
+    state.discardPile = [top];
+  }
+  return state.deck.pop();
+}
+
+// ============================================================
+// 出牌
+// ============================================================
+function playCard(playerIdx, cardIdx) {
+  if (state.isBusy || state.gameOver) return;
+  if (playerIdx !== state.currentPlayer) return;
+
+  const card = state.players[playerIdx][cardIdx];
+  if (!card || !canPlay(card)) return;
+
+  state.isBusy = true;
+
+  // Wild 卡需要選顏色
+  if (card.color === 'wild') {
+    state.pendingWildCard = { playerIdx, cardIdx, card };
+    showColorPicker();
+    return;
+  }
+
+  executePlayCard(playerIdx, cardIdx, card, null);
+}
+
+function executePlayCard(playerIdx, cardIdx, card, chosenColor) {
+  // 從手牌移除
+  state.players[playerIdx].splice(cardIdx, 1);
+  state.discardPile.push(card);
+  state.currentColor = chosenColor || card.color;
+  state.drawnThisTurn = false;
+
+  // UNO 檢查
+  if (state.players[playerIdx].length === 1) {
+    if (!state.unoCalled[playerIdx]) {
+      // AI 自動喊 UNO
+      if (playerIdx !== 0) {
+        state.unoCalled[playerIdx] = true;
+        showMessage(PLAYER_NAMES[playerIdx] + ' 喊了 UNO！');
+      }
+    }
+  }
+
+  // 檢查勝利
+  if (state.players[playerIdx].length === 0) {
+    endGame(playerIdx);
+    return;
+  }
+
+  // 重置 UNO 狀態
+  if (state.players[playerIdx].length > 1) {
+    state.unoCalled[playerIdx] = false;
+  }
+
+  renderAll();
+
+  // 套用卡牌效果
+  setTimeout(() => {
+    applyCardEffect(card, playerIdx);
+  }, 400);
+}
+
+// ============================================================
+// 卡牌效果
+// ============================================================
+function applyCardEffect(card, playerIdx) {
+  let skipNext = 0;
+
+  switch (card.type) {
+    case 'skip':
+      skipNext = 1;
+      showMessage(PLAYER_NAMES[playerIdx] + ' 出了 Skip！跳過下一位');
+      break;
+    case 'reverse':
+      state.direction *= -1;
+      showMessage(PLAYER_NAMES[playerIdx] + ' 出了反轉！方向改變');
+      updateDirectionIndicator();
+      // 4 人時，reverse 不跳過
+      break;
+    case 'draw2':
+      const nextP2 = getNextPlayer(playerIdx);
+      drawCards(nextP2, 2);
+      skipNext = 1;
+      showMessage(PLAYER_NAMES[playerIdx] + ' 出了 +2！' + PLAYER_NAMES[nextP2] + ' 抽 2 張');
+      break;
+    case 'wild':
+      showMessage(PLAYER_NAMES[playerIdx] + ' 出了 Wild！顏色：' + COLOR_NAMES[state.currentColor]);
+      break;
+    case 'wild4':
+      const nextP4 = getNextPlayer(playerIdx);
+      drawCards(nextP4, 4);
+      skipNext = 1;
+      showMessage(PLAYER_NAMES[playerIdx] + ' 出了 +4！' + PLAYER_NAMES[nextP4] + ' 抽 4 張');
+      break;
+  }
+
+  renderAll();
+
+  setTimeout(() => {
+    nextTurn(skipNext);
+  }, 600);
+}
+
+// ============================================================
+// 取得下一位玩家
+// ============================================================
+function getNextPlayer(from = state.currentPlayer) {
+  return (from + state.direction + 4) % 4;
+}
+
+// ============================================================
+// 下一回合
+// ============================================================
+function nextTurn(skip = 0) {
+  state.currentPlayer = (state.currentPlayer + state.direction * (1 + skip) + 4) % 4;
+  state.drawnThisTurn = false;
+  state.isBusy = false;
+  renderAll();
+
+  if (state.currentPlayer !== 0 && !state.gameOver) {
+    setTimeout(() => aiTurn(state.currentPlayer), 800);
+  } else if (!state.gameOver) {
+    showMessage('輪到你了');
+    checkUnoButton();
+  }
+}
+
+// ============================================================
+// AI 回合
+// ============================================================
+function aiTurn(playerIdx) {
+  if (state.isBusy || state.gameOver) return;
+  state.isBusy = true;
+
+  const hand = state.players[playerIdx];
+  const playable = [];
+  for (let i = 0; i < hand.length; i++) {
+    if (canPlay(hand[i])) playable.push(i);
+  }
+
+  if (playable.length === 0) {
+    // 抽牌
+    const drawn = drawFromDeck();
+    if (drawn) {
+      state.players[playerIdx].push(drawn);
+      showMessage(PLAYER_NAMES[playerIdx] + ' 抽了一張牌');
+      renderAll();
+    }
+
+    setTimeout(() => {
+      // 抽完後如果能出就出
+      if (drawn && canPlay(drawn)) {
+        const cardIdx = state.players[playerIdx].length - 1;
+        if (drawn.color === 'wild') {
+          // AI 選顏色
+          const chosenColor = chooseAIColor(state.players[playerIdx]);
+          showMessage(PLAYER_NAMES[playerIdx] + ' 出了 Wild！顏色：' + COLOR_NAMES[chosenColor]);
+          executePlayCard(playerIdx, cardIdx, drawn, chosenColor);
+        } else {
+          executePlayCard(playerIdx, cardIdx, drawn, null);
+        }
+      } else {
+        nextTurn(0);
+      }
+    }, 700);
+    return;
+  }
+
+  // AI 出牌策略：優先出功能牌，再出數字牌，保留 Wild
+  let bestIdx = -1;
+  let priority = -1;
+
+  for (const idx of playable) {
+    const card = hand[idx];
+    let p = 0;
+    if (card.type === 'wild4') p = 0;
+    else if (card.type === 'wild') p = 1;
+    else if (card.type === 'draw2') p = 5;
+    else if (card.type === 'skip') p = 4;
+    else if (card.type === 'reverse') p = 3;
+    else p = 2; // 數字牌
+
+    if (p > priority) {
+      priority = p;
+      bestIdx = idx;
+    }
+  }
+
+  const card = hand[bestIdx];
+  if (card.color === 'wild') {
+    const chosenColor = chooseAIColor(state.players[playerIdx]);
+    showMessage(PLAYER_NAMES[playerIdx] + ' 出了 ' + getCardName(card) + '！顏色：' + COLOR_NAMES[chosenColor]);
+    executePlayCard(playerIdx, bestIdx, card, chosenColor);
+  } else {
+    showMessage(PLAYER_NAMES[playerIdx] + ' 出了 ' + getCardName(card));
+    executePlayCard(playerIdx, bestIdx, card, null);
+  }
+}
+
+// ============================================================
+// AI 選顏色（選手牌中最多的顏色）
+// ============================================================
+function chooseAIColor(hand) {
+  const counts = { red: 0, yellow: 0, green: 0, blue: 0 };
+  for (const c of hand) {
+    if (c.color !== 'wild') counts[c.color]++;
+  }
+  let best = 'red';
+  for (const c of COLORS) {
+    if (counts[c] > counts[best]) best = c;
+  }
+  return best;
+}
+
+// ============================================================
+// 抽牌給玩家
+// ============================================================
+function drawCards(playerIdx, count) {
+  for (let i = 0; i < count; i++) {
+    const card = drawFromDeck();
+    if (card) state.players[playerIdx].push(card);
+  }
+  state.unoCalled[playerIdx] = false;
+}
+
+// ============================================================
+// 玩家點擊抽牌堆
+// ============================================================
+function onDrawClick() {
+  if (state.isBusy || state.gameOver) return;
+  if (state.currentPlayer !== 0) return;
+
+  if (state.drawnThisTurn) {
+    showMessage('你已經抽過牌了，請出牌或跳過');
+    return;
+  }
+
+  state.isBusy = true;
+  const card = drawFromDeck();
+  if (card) {
+    state.players[0].push(card);
+    state.drawnThisTurn = true;
+    renderAll();
+
+    if (canPlay(card)) {
+      state.isBusy = false;
+      renderAll();
+      showMessage('你抽到了一張可出的牌！');
+    } else {
+      showMessage('你抽到了一張無法出的牌，跳過回合');
+      setTimeout(() => nextTurn(0), 800);
+    }
+  }
+}
+
+// ============================================================
+// UNO 按鈕
+// ============================================================
+function checkUnoButton() {
+  const btn = document.getElementById('uno-btn');
+  if (state.currentPlayer === 0 && state.players[0].length === 2 && !state.unoCalled[0]) {
+    btn.classList.add('show');
+  } else {
+    btn.classList.remove('show');
+  }
+}
+
+function callUno() {
+  if (state.players[0].length === 1 || state.players[0].length === 2) {
+    state.unoCalled[0] = true;
+    document.getElementById('uno-btn').classList.remove('show');
+    showMessage('你喊了 UNO！');
+  }
+}
+
+// ============================================================
+// 顏色選擇器
+// ============================================================
+function showColorPicker() {
+  document.getElementById('color-picker-overlay').classList.add('show');
+}
+
+function selectColor(color) {
+  document.getElementById('color-picker-overlay').classList.remove('show');
+  if (state.pendingWildCard) {
+    const { playerIdx, cardIdx, card } = state.pendingWildCard;
+    state.pendingWildCard = null;
+    state.currentColor = color;
+    executePlayCard(playerIdx, cardIdx, card, color);
+  }
+}
+
+// ============================================================
+// 遊戲結束
+// ============================================================
+function endGame(winnerIdx) {
+  state.gameOver = true;
+  state.isBusy = true;
+  renderAll();
+
+  const overlay = document.getElementById('win-overlay');
+  const title = document.getElementById('win-title');
+  const msg = document.getElementById('win-message');
+
+  if (winnerIdx === 0) {
+    title.textContent = '恭喜獲勝！';
+    msg.textContent = '你贏了這場 UNO！';
+  } else {
+    title.textContent = '遊戲結束';
+    msg.textContent = PLAYER_NAMES[winnerIdx] + ' 贏了！再試一次吧！';
+  }
+
+  overlay.classList.add('show');
+}
+
+// ============================================================
+// 開始新遊戲
+// ============================================================
+function startNewGame() {
+  state = {
+    players: [[], [], [], []],
+    deck: shuffle(createDeck()),
+    discardPile: [],
+    currentPlayer: 0,
+    direction: 1,
+    currentColor: null,
+    isBusy: false,
+    gameOver: false,
+    pendingWildCard: null,
+    unoCalled: [false, false, false, false],
+    drawnThisTurn: false,
+  };
+
+  document.getElementById('win-overlay').classList.remove('show');
+  document.getElementById('color-picker-overlay').classList.remove('show');
+  document.getElementById('uno-btn').classList.remove('show');
+
+  // 發牌
+  for (let i = 0; i < 7; i++) {
+    for (let p = 0; p < 4; p++) {
+      state.players[p].push(state.deck.pop());
+    }
+  }
+
+  // 翻第一張牌（找數字牌）
+  let firstCard;
+  do {
+    firstCard = state.deck.pop();
+    if (firstCard.type !== 'number') {
+      state.deck.push(firstCard);
+      state.deck = shuffle(state.deck);
+    }
+  } while (firstCard.type !== 'number');
+
+  state.discardPile.push(firstCard);
+  state.currentColor = firstCard.color;
+
+  showMessage('遊戲開始！輪到你了');
+  renderAll();
+  updateDirectionIndicator();
+}
+
+// ============================================================
+// 渲染：卡牌 HTML
+// ============================================================
+function renderCardHTML(card, isPlayable, cardIdx) {
+  const dataColor = card.color;
+  let centerHTML = '';
+  let cornerHTML = '';
+
+  if (card.type === 'number') {
+    centerHTML = card.value;
+    cornerHTML = card.value;
+  } else if (card.type === 'skip') {
+    centerHTML = '⊘';
+    cornerHTML = '⊘';
+  } else if (card.type === 'reverse') {
+    centerHTML = '↻';
+    cornerHTML = '↻';
+  } else if (card.type === 'draw2') {
+    centerHTML = '+2';
+    cornerHTML = '+2';
+  } else if (card.type === 'wild') {
+    centerHTML = '★';
+    cornerHTML = '';
+  } else if (card.type === 'wild4') {
+    centerHTML = '+4';
+    cornerHTML = '+4';
+  }
+
+  const wildQuadrants = card.color === 'wild' ? '<div class="wild-quadrants"></div>' : '';
+
+  const playableClass = isPlayable ? ' playable' : '';
+  const onclick = isPlayable && cardIdx !== undefined
+    ? `onclick="playCard(0, ${cardIdx})"`
+    : '';
+
+  return `
+    <div class="card${playableClass}" data-color="${dataColor}" ${onclick}>
+      <div class="card-inner">
+        ${wildQuadrants}
+        <div class="card-oval"></div>
+        ${cornerHTML ? `<div class="card-corner tl">${cornerHTML}</div>` : ''}
+        ${cornerHTML ? `<div class="card-corner br">${cornerHTML}</div>` : ''}
+        <div class="card-center-value">${centerHTML}</div>
+      </div>
+    </div>
+  `;
+}
+
+// ============================================================
+// 渲染所有
+// ============================================================
+function renderAll() {
+  // 渲染玩家手牌
+  const handEl = document.getElementById('hand-0');
+  let handHTML = '';
+  for (let i = 0; i < state.players[0].length; i++) {
+    const card = state.players[0][i];
+    const isMyTurn = state.currentPlayer === 0 && !state.isBusy && !state.gameOver;
+    const playable = isMyTurn && canPlay(card);
+    handHTML += renderCardHTML(card, playable, i);
+  }
+  handEl.innerHTML = handHTML;
+
+  // 渲染 AI 手牌（牌背）
+  for (let p = 1; p <= 3; p++) {
+    const el = document.getElementById('hand-' + p);
+    let html = '';
+    const count = state.players[p].length;
+    const showCount = Math.min(count, 8); // 最多顯示 8 張
+    for (let i = 0; i < showCount; i++) {
+      html += '<div class="card-back"></div>';
+    }
+    if (count > showCount) {
+      html += `<div class="card-back" style="font-size:11px;">+${count - showCount}</div>`;
+    }
+    el.innerHTML = html;
+  }
+
+  // 渲染棄牌堆最上面一張
+  const discardEl = document.getElementById('discard-card-container');
+  if (state.discardPile.length > 0) {
+    const topCard = state.discardPile[state.discardPile.length - 1];
+    // 如果是 Wild 且已選顏色，用選的顏色顯示邊框
+    let cardHTML = renderCardHTML(topCard, false, undefined);
+    if (topCard.color === 'wild' && state.currentColor) {
+      cardHTML = cardHTML.replace('data-color="wild"', `data-color="wild" style="border: 4px solid var(--${state.currentColor});"`);
+    }
+    discardEl.innerHTML = cardHTML;
+  }
+
+  // 更新玩家名稱（高亮當前玩家）
+  for (let p = 0; p < 4; p++) {
+    const nameEl = document.getElementById('name-' + p);
+    if (nameEl) {
+      nameEl.textContent = PLAYER_NAMES[p] + ' (' + state.players[p].length + ')';
+      if (p === state.currentPlayer && !state.gameOver) {
+        nameEl.classList.add('active');
+      } else {
+        nameEl.classList.remove('active');
+      }
+    }
+  }
+
+  checkUnoButton();
+}
+
+// ============================================================
+// 方向指示器
+// ============================================================
+function updateDirectionIndicator() {
+  const el = document.getElementById('direction-indicator');
+  const svg = el.querySelector('svg');
+  if (state.direction === 1) {
+    svg.style.transform = 'rotate(0deg)';
+  } else {
+    svg.style.transform = 'rotate(180deg)';
+  }
+}
+
+// ============================================================
+// 顯示訊息
+// ============================================================
+function showMessage(msg) {
+  const bar = document.getElementById('message-bar');
+  bar.textContent = msg;
+  bar.style.opacity = '1';
+  // 自動淡出
+  clearTimeout(window._msgTimer);
+  window._msgTimer = setTimeout(() => {
+    bar.style.opacity = '0.5';
+  }, 3000);
+}
+
+// ============================================================
+// 取得卡牌名稱
+// ============================================================
+function getCardName(card) {
+  if (card.type === 'number') return COLOR_NAMES[card.color] + card.value;
+  if (card.type === 'skip') return COLOR_NAMES[card.color] + ' Skip';
+  if (card.type === 'reverse') return COLOR_NAMES[card.color] + ' 反轉';
+  if (card.type === 'draw2') return COLOR_NAMES[card.color] + ' +2';
+  if (card.type === 'wild') return 'Wild';
+  if (card.type === 'wild4') return 'Wild +4';
+  return '';
+}
+
+// ============================================================
+// 初始化
+// ============================================================
+startNewGame();
+</script>
+
+</body>
+</html>
